@@ -9,7 +9,7 @@ Payments · PAY-01 · 24 Oct 2026
 ## What changed
 
 - **Branch:** `claude/trusting-feynman-wl76s7`, from `main`. It touches only `docs/payments/` and `docs/handoffs/`, so it won't conflict with BE-01, DES-01 or CMP-01.
-- **Pull request:** draft, titled `[PAY-01] Provider applications`.
+- **Pull request:** https://github.com/ifyoufeel/fomo/pull/4 (draft).
 - **`docs/payments/README.md`:** the folder index, placeholders and source markers.
 - **`docs/payments/provider-comparison.md`:**
   - the recommendation;
