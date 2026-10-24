@@ -14,7 +14,7 @@ Compliance · CMP-01 · 24 Oct 2026
 ## What changed
 
 - **Branch:** `claude/epic-knuth-edjlev`, from `main`. It touches only `docs/legal/` and `docs/handoffs/`, so it won't conflict with BE-01.
-- **Pull request:** not opened yet.
+- **Pull request:** https://github.com/ifyoufeel/fomo/pull/3 (draft).
 - **`docs/legal/launch-policy.md`**, version 1.0.0. It covers:
   - Principles: fail closed, the most restrictive jurisdiction wins, the never list can't be switched on, and flags can only restrict.
   - Inputs, and how signals map to countries and markets, with ISO codes for every market.
