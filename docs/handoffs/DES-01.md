@@ -28,6 +28,26 @@ All three directions use the same sample lots, prices and page structure, so the
   - A bid in the last 2 minutes extends the clock and adds you to the live feed.
 - **Blur tweak:** glass blur is adjustable from 0 to 48 px in each page's Tweaks panel.
 
+## Round 2 · 24 Oct 2026
+
+**Owner feedback:** prefers C, with B's green as the action colour. They also shared two earlier directions to combine with it: the LASTFOMO "Illuminated Protocol" brandbook and the Soft Matter 3D gallery.
+
+The canvas has a new "Round 2 · C combinations" page. Round 1 is unchanged.
+
+| | C1 · Clear Case + Lime | C2 · Clear Case + Illuminated | C3 · Clear Case + Soft Matter |
+|---|---|---|---|
+| Ground | Pearl, light | Ink #111111, night | Mist #E9E7EE, light |
+| Action | Lime #CDF56A with ink text | Chartreuse #D4F70D, used only as a surface | Lime #CDF56A with an ink plus circle |
+| Type | Funnel Display, Funnel Sans, Martian Mono | Jacquard 24 (names), Geist Light, Geist Mono | Instrument Sans, Instrument Serif italic (titles), Doto (numbers) |
+| Mark | Slab mark with a lime label band, "fomo" | "lastfomo" wordmark | Galloping horse mark |
+| Signature | Ink bid case on a light page; lime "Inspected" sticker | One acid tile per page; 70/20/10 ink, grey and acid | The walkable viewing room as the home hero |
+
+**Key board finding:** every green reads well with ink text on it, at 11:1 or better.
+
+- **On a light ground** (pearl or mist), the green itself barely separates from the page, at 1.0 to 1.4:1. So it needs an ink edge, an ink case or an ink dot.
+- **On ink,** any of the greens works as it is.
+- **Magenta,** the brandbook's Arca storage wing colour, is shown as the alternative.
+
 ## Checks run
 
 - **Brief rules, checked by hand:**
@@ -69,6 +89,15 @@ All three directions use the same sample lots, prices and page structure, so the
 3. **Does the 20% buyer's premium apply to fixed-price "Buy now" sales?**
    - D9 names it without saying, and the design rule asks for the premium and total next to every buy button, so I showed it.
    - Recommended default: confirm it with Marketplace in MKT-01.
+
+### Added in Round 2
+
+4. **Which combination: C1, C2 or C3?**
+5. **Is the brand "lastfomo"?** The brandbook uses that name.
+   - If this platform is one wing of that house, the brandbook's rule ("one wing colour per composition") points to Arca magenta rather than green.
+   - Recommended default: keep green as the action colour and treat the wing colour as a later decision.
+6. **Should the horse mark be the logo?** It comes from Soft Matter, which used no brand name.
+7. **Chinese and Japanese names in C2.** Jacquard 24 has no CJK glyphs, so zh-TW and ja item names would need a matching serif (Noto Serif TC and JP).
 
 ## Next task I'd take
 
