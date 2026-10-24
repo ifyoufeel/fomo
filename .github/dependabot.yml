@@ -1,0 +1,17 @@
+version: 2
+updates:
+  # Security updates only: a limit of 0 turns off routine version bumps, but Dependabot still
+  # opens security pull requests (enable "Dependabot security updates" in the repo settings).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: daily
+    open-pull-requests-limit: 0
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]

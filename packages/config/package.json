@@ -1,0 +1,31 @@
+{
+  "name": "@fomo/config",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    "./tsconfig/base.json": "./tsconfig/base.json",
+    "./tsconfig/node.json": "./tsconfig/node.json",
+    "./tsconfig/nextjs.json": "./tsconfig/nextjs.json",
+    "./eslint/base": "./eslint/base.js",
+    "./eslint/next": "./eslint/next.js"
+  },
+  "scripts": {
+    "lint": "eslint ."
+  },
+  "dependencies": {
+    "@eslint/js": "catalog:",
+    "eslint-config-next": "catalog:",
+    "eslint-config-prettier": "catalog:",
+    "globals": "catalog:",
+    "typescript-eslint": "catalog:"
+  },
+  "devDependencies": {
+    "eslint": "catalog:",
+    "typescript": "catalog:"
+  },
+  "peerDependencies": {
+    "eslint": "^10.0.0",
+    "typescript": "~6.0.0"
+  }
+}

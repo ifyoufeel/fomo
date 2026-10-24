@@ -1,0 +1,40 @@
+packages:
+  - apps/*
+  - packages/*
+
+# One version per shared dependency. Reference these as "catalog:" in package.json;
+# scripts/check-repo.mjs fails CI when a package pins its own version of a catalog entry.
+catalog:
+  "@eslint/js": ^10.0.1
+  "@hono/node-server": ^2.1.5
+  "@types/node": ^24.19.2
+  "@types/react": ^19.3.0
+  "@types/react-dom": ^19.3.0
+  eslint: ^10.13.0
+  eslint-config-next: ^16.4.3
+  eslint-config-prettier: ^10.1.8
+  globals: ^17.13.0
+  hono: ^4.13.13
+  next: ^16.4.3
+  prettier: ^3.9.10
+  react: ^19.3.1
+  react-dom: ^19.3.1
+  tsx: ^4.23.15
+  turbo: ^2.11.10
+  # typescript-eslint supports TypeScript < 6.1, so stay on 6.0.x until it catches up.
+  typescript: ~6.0.3
+  typescript-eslint: ^8.72.0
+  vitest: ^5.0.5
+
+# eslint-config-next still pulls plugins whose peer range stops at ESLint 9. ESLint 9 is out of
+# support, and these plugins run fine on 10 (checked in BE-01), so accept 10 for them only.
+peerDependencyRules:
+  allowedVersions:
+    eslint-plugin-import>eslint: "10"
+    eslint-plugin-jsx-a11y>eslint: "10"
+    eslint-plugin-react>eslint: "10"
+
+# pnpm 10 blocks dependency install scripts unless listed here.
+onlyBuiltDependencies:
+  - esbuild
+  - unrs-resolver
