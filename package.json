@@ -1,0 +1,25 @@
+{
+  "name": "fomo",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.34.7",
+  "engines": {
+    "node": "24.x"
+  },
+  "scripts": {
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "typecheck": "turbo run typecheck",
+    "test": "turbo run test",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "check:repo": "node scripts/check-repo.mjs",
+    "check": "pnpm check:repo && pnpm format:check && turbo run lint typecheck test build"
+  },
+  "devDependencies": {
+    "prettier": "catalog:",
+    "turbo": "catalog:"
+  }
+}
