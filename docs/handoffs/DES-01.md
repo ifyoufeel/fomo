@@ -27,6 +27,7 @@ This is what DES-02 builds on.
 
 ## What changed
 
+- **Pull request:** https://github.com/ifyoufeel/fomo/pull/2 (draft), with this note as its only file.
 - **Design canvas** (private until shared): https://claude.ai/artifact/EgeQtoy1BLwbFFSfpnZvBq
   - **Round 1:** three directions (A Nocturne, B Clubhouse, C Clear Case). Each has a brand sheet, a home page and an item page.
   - **Round 2:** three combinations of C with a green action colour:
