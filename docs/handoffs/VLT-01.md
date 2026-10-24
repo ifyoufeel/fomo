@@ -9,7 +9,7 @@ Vault & redemption · VLT-01 · 24 Oct 2026
 ## What changed
 
 - **Branch:** `claude/sleepy-hopper-0w9kuu`, from `main`. It touches only `docs/vault/` and `docs/handoffs/`, so it won't conflict with BE-01, DES-01, CMP-01 or PAY-01.
-- **Pull request:** to follow (draft).
+- **Pull request:** https://github.com/ifyoufeel/fomo/pull/5 (draft).
 - **`docs/vault/README.md`:** the folder index, placeholders and source markers.
 - **`docs/vault/custody-comparison.md`:**
   - the recommendation, and eight findings that need a ruling;
