@@ -25,7 +25,7 @@ Amounts are in US dollars, the ledger unit (USD = USDC). TWD is shown as indicat
 | N2 | Lowest opening bid | US$10 | Below this, fixed price fits better | 4.2 |
 | N3 | Soft-close window | 2 minutes | The brief's example. Catawiki uses 60 seconds [S]; most platforms use 1–10 minutes [S] | 4.6 |
 | N4 | After a late bid | The clock resets to 2 minutes | "There are always 2 minutes after the last bid" is easy to explain and bounds each extension | 4.6 |
-| N5 | Latest close (the cap) | 60 minutes after the scheduled end | It takes about 34 back-to-back late bids to reach it (example E7). It gives every lot a known latest close for settlement, support and realtime load | 4.6 |
+| N5 | Latest close (the cap) | 60 minutes after the scheduled end | Reaching it takes an hour of price-raising bids, each less than 2 minutes after the last: at least about 30 bids (example E7 has 34). It gives every lot a known latest close for settlement, support and realtime load | 4.6 |
 | N6 | Auction length | 3 to 14 days; 7 by default | Enough time for KYC and backing before the close | 4.2 |
 | N7 | Closing order in a sale | One lot a minute, in lot order. The operator may set up to 10 lots a minute for large sales | Christie's and Phillips close online sales lot by lot at 1-minute intervals [S] | 4.2 |
 | N8 | Buyer's premium | 20% of the winning bid, on every auction lot | D9 | 5 |
@@ -46,7 +46,7 @@ Amounts are in US dollars, the ledger unit (USD = USDC). TWD is shown as indicat
 2. **Our own stock only** (D7). The company is the only seller, and it never bids (section 8).
 3. **Bidding is free.** No bid fees, no paid entry and no penalty fees.
 4. **The price you see is the price you pay.** The 20% premium and the total show beside every bid button (section 5).
-5. **Every live bid is backed.** A bid is accepted only if what it could cost is covered (section 6).
+5. **Every new bid is backed.** A bid is accepted only if what it could cost is covered at that moment (section 6). Once a bid is outbid, its backing is released. If a void later puts that bid back in the lead, the bidder pays like a bidding-limit winner (4.8).
 6. **Rules don't change during a lot.** Once a lot opens, the operator can lower its reserve, withdraw it or pause the whole sale, and nothing else.
 7. **Everything is logged, and the bid log is published** with its hash in the settlement transaction (`settlement.md`).
 8. **The chain stays invisible.** Users see "set aside", "your vault" and "your item", never "escrow", "wallet", "token" or "gas".
@@ -60,13 +60,14 @@ Amounts are in US dollars, the ledger unit (USD = USDC). TWD is shown as indicat
 | `draft` | Being prepared in admin; not visible | `scheduled`, deleted |
 | `scheduled` | Visible with its start and end times; no bids yet | `open`, `cancelled` |
 | `open` | Taking bids. A sale-wide pause stops the clock (4.8) | `closed`, `cancelled` |
-| `closed` | The end time has passed; the close command has picked the result | `awaiting_payment`, `unsold` |
-| `awaiting_payment` | Won; payment not yet captured | `paid`, `defaulted` |
-| `paid` | Payment captured; settlement pending | `settled` |
-| `settled` | Ownership recorded on-chain and in our records | — |
-| `defaulted` | The winner didn't pay; second-chance offers run (7.4) | `settled` (an offer was accepted and paid), `unsold` |
-| `unsold` | No bids, reserve not met, or no second-chance offer taken | — (the operator relists as a new lot or lists at fixed price) |
-| `cancelled` | Withdrawn before the close (4.8) | — |
+| `closed` | The end time has passed; the close command has recorded the result. A transient state | `awaiting_payment`, `paid`, `offers`, `unsold` |
+| `awaiting_payment` | Won by a bidder using a bidding limit, or one whose card-hold capture failed; payment is due (7.2) | `paid`, `offers` (a default) |
+| `paid` | Payment captured, or the winner's USDC set aside covers the total. Settlement pending | `settled`, `cancelled` (the item can't be delivered: full refund) |
+| `settled` | Ownership recorded on-chain and in our records | `returned` |
+| `returned` | The buyer cancelled within the statutory right (7.6). The item came back to our inventory and the buyer was refunded | `offers` (within 14 days of the close), or nothing (the operator relists the item as a new lot) |
+| `offers` | Second-chance or post-auction offers are running, one at a time. This follows a default, a winner who failed the check at the close, a return, or an operator's post-auction offer on an unsold lot (7.4, 7.5) | `paid` (an offer was accepted and paid), `unsold` |
+| `unsold` | No bids, the reserve was not met, or no offer was taken | `offers` (a post-auction offer, within 3 days of the close). Otherwise the item can be relisted as a new lot or listed at fixed price |
+| `cancelled` | Withdrawn before the close (4.8), or after payment when the item can't be delivered | — |
 
 Bids are refused once the database time reaches the end time, whether or not the close command has run yet. The close job's timing never changes a result.
 
@@ -113,28 +114,34 @@ Bids are refused once the database time reaches the end time, whether or not the
   - two or more: the next rung above the second-highest maximum, but never more than the highest maximum;
   - a tie at the top: the tied amount. The bidder who reached that amount first leads;
   - then the reserve rule in 4.5.
-- **The leader** is the bidder with the highest maximum; between equal maximums, the one with the lower sequence number (the earlier bid).
-- **Raising your own maximum** is allowed at any time before the close, to any ladder amount above your current maximum. It doesn't change the current price unless it meets the reserve (4.5).
+- **The leader** is the bidder with the highest maximum; between equal maximums, the one with the lower bid number (the earlier bid).
+- **The leader may raise their own maximum** at any time before the close, to any ladder amount above it. The current price stays the same unless the raise meets the reserve (4.5).
+- **A bidder who isn't leading** places a new maximum like anyone else: at least the minimum bid, even when it replaces their own earlier maximum. For example, with B's maximum at 200 and the price at 225, B's next maximum must be at least 250 (E2).
 - **Bids are binding.** A bidder can't lower or withdraw a maximum. Section 4.8 covers corrections.
 - **Outbid maximums stay.** When a bidder is outbid, their backing for that lot can be released (6.1), but their maximum stays and still counts when the price is computed. Taking back the amount set aside therefore never lowers the price.
 - **Privacy.** Only the bidder sees their own maximum. Others see the current price, the leader's bidder code and the number of bids. After the close, the bid log publishes every maximum except the winner's (`settlement.md`).
-- **Time and order.** Each bid takes its time from the database after it has locked the lot, and gets the lot's next sequence number. A later sequence number never carries an earlier time (MKT-02 enforces this).
+- **Time and order.** Each accepted bid takes its time from the database after it has locked the lot, and gets the lot's next **bid number**. A later bid number never carries an earlier time (MKT-02 enforces this). Bid numbers count every accepted maximum, including a leader's raise that changes nothing public. They are separate from the realtime sequence `seq`, which counts public lot events only (`events-and-channels.md`, section 1).
+- **The bid count shown** is the number of accepted bids that changed something public, so a leader's quiet raise isn't revealed.
 
 ### 4.5 Reserve
 
 - **Status shown:** "No reserve", "Reserve not met" or "Reserve met". The amount itself is never shown during the auction.
 - **The reserve rule:** when the leader's maximum is at or above the reserve, the current price is at least the reserve. So a single bidder whose maximum covers the reserve leads at the reserve, not at the opening bid. This is the leader's own maximum bidding for them, as on eBay [S]; it is not a seller bid.
-- **The reserve can be lowered** during the auction, never raised. Each change is a logged operator command and appears in the bid log. A lowered reserve may meet the reserve at once.
+- **The reserve can be lowered** during the auction, never raised: to any ladder amount from the opening bid up, or removed altogether.
+  - Each change is a logged operator command.
+  - The new amount appears in the bid log when it is published at the close.
+  - A lowered reserve may be met at once, which can lift the price to it.
 - **Proof:** a commitment to the reserve (a salted hash) is fixed when the lot opens and opened in the bid log after the close, so anyone can check the reserve never went up (`settlement.md`, section 3).
 - **Reserve not met at the close:** the lot is unsold. The operator may make the highest bidder a post-auction offer (7.5).
 
 ### 4.6 Soft close (N3–N5)
 
-- **The rule.** When a bid is accepted with less than 2 minutes to go, and it changes the price, the leader or the reserve status, the end time moves to 2 minutes after that bid. The end time never moves past the latest close: the scheduled end plus 60 minutes.
+- **The rule.** When the price, the leader or the reserve status changes with less than 2 minutes to go, the end time moves to 2 minutes after that change. The change can come from a bid, a lowered reserve or a removed bidder. The end time never moves past the latest close: the scheduled end plus 60 minutes, moved only by a pause (4.8).
+- **For bids,** "changes the price, the leader or the reserve status" means exactly "raises the price". Every bid that changes any of the three raises the price, and no other bid does. So users can be told simply: a bid that raises the price in the last 2 minutes resets the clock.
 - **Strict end.** A bid is accepted only while the database time is before the end time. A bid at the end time exactly is refused (`lot_closed`).
 - **What doesn't extend:** a leader raising their own maximum without changing anything visible (example E4), and any refused bid. Otherwise a leader could keep a lot open by raising their own maximum in small steps.
 - **Shown from the start:** the scheduled end, and "closes by" the latest close.
-- **Design copy.** DES-01 used "a bid in the last two minutes adds two minutes". The rule resets the clock to 2 minutes, so the copy becomes "A bid in the last 2 minutes resets the clock to 2 minutes" (section 13).
+- **Design copy.** DES-01 used "a bid in the last two minutes adds two minutes". The rule resets the clock to 2 minutes, and only for a bid that raises the price. The copy becomes "A bid that raises the price in the last 2 minutes resets the clock to 2 minutes" (section 13).
 
 ### 4.7 Worked examples
 
@@ -150,20 +157,24 @@ These are the first test vectors for MKT-02. A reference model in this session p
 | E4 | Opening 100, no reserve | A max 500; B max 200; at 19:59:00 A raises to 1,000 | 100 A; 225 A; 225 A, nothing visible changed, so no extension. Sold to A at 225 |
 | E5 | Opening 100, no reserve | A max 500; at 19:58:30 B max 550; at 20:00:29 A max 700; at 20:02:29 B max 750 | 100 A; 550 B, end 20:00:30; 600 A, end 20:02:29; B refused, `lot_closed`. Sold to A at 600 |
 | E6 | Opening 100, no reserve | At 19:57:00 A max 500 | 100 A; more than 2 minutes left, so no extension |
-| E7 | Opening 1,000, no reserve | A max 1,000 at 19:50; then A and B alternate minimum bids every 110 seconds from 19:59:00 | 34 bids are accepted, the last at 20:59:30 at 12,000, and the end stops at the cap, 21:00:00. The next bid, at 21:01:20, is refused |
+| E7 | Opening 1,000, no reserve | A max 1,000 at 19:50; then, starting with B at 19:59:00, B and A alternate minimum bids every 110 seconds (so each bid raises the price) | 34 bids are accepted, the last at 20:59:30 at 12,000, and the end stops at the cap, 21:00:00. The next bid, at 21:01:20, is refused |
 | E8 | Ladder edges | Bids of 48, 50, 475, 4,750; and of 9, 230, 510 | Accepted, and the next rungs are 50, 55, 500, 5,000. Refused as `amount_not_on_ladder` |
 | E9 | Opening 100, no reserve | A max 1,000; B max 700; support voids B's bid | 100 A; 750 A; 100 A (the price can fall after a void) |
 
-All-in totals at the 20% premium: a winning bid of US$100 costs US$120.00; US$1,000 costs US$1,200.00; US$12,500 costs US$15,000.00; US$47,500 costs US$57,000.00.
+All-in totals at the 20% premium: a winning bid of US$100 costs US$120.00; US$1,000 costs US$1,200.00; US$12,000 costs US$14,400.00; US$47,500 costs US$57,000.00.
 
 ### 4.8 Corrections, removals, withdrawals and outages
 
 - **A bidder's own mistake (N15).** Support may void one bid, at the bidder's request, when it is clearly a mistake (for example an extra zero). This works until 1 hour before the scheduled end, once per bidder per lot. The bidder's maximum goes back to what it was before that bid, the price is recomputed and may fall (E9), and the bid log shows the void.
 - **Leading again after a void.** If a void or removal makes an outbid bidder the leader again, they lead even if their backing was already released. If they win, they pay within the 48-hour window (7.2), and missing it isn't a strike.
-- **A bidder who becomes ineligible** during the auction (a screening hit, a blocked location, a closed or barred account) has every maximum on open lots removed at once, at any time. The price is recomputed. The bid log shows "removed" with no reason, so nobody is tipped off.
+- **A bidder who becomes ineligible** during the auction (a screening hit, a blocked location, a closed or barred account) has every maximum on open lots removed at once, at any time. The price is recomputed. The bid log shows "removed" with no reason, so nobody is tipped off. A removed bidder gets no second-chance or post-auction offer.
 - **Withdrawing a lot** (`cancelled`) is allowed only before the close and only when the item can't be sold as described: damage, loss, a failed authentication, a compliance hold, or a listing error that changes the description materially. Every bid is void and all backing is released. Withdrawing a lot to avoid a low price is never allowed; the reserve is the only protection.
 - **Small listing fixes,** such as a typo in the text, don't need a withdrawal. A material change does: withdraw the lot and relist it.
-- **Outages (N16).** If bidding is unavailable for 60 seconds or more while any lot in a sale is open, the operator pauses the sale, or monitoring does it automatically. Every open lot's clock stops. On resume, each lot gets the time it had left plus 10 minutes, and its latest close moves by the same amount. Users are told on the lot page and by notification.
+- **Outages (N16).** If bidding is unavailable for 60 seconds or more while any lot in a sale is open, the operator pauses the sale, or monitoring does it automatically.
+  - **The pause counts from the start of the outage,** not from when it was declared. Every lot open at that moment stops its clock with the time it had left then.
+  - **Closes wait for monitoring.** The close command doesn't close a lot while monitoring reports bidding as unhealthy, so no lot closes during the first minute of an outage.
+  - **On resume,** each lot's end becomes the resume time plus the time it had left plus 10 minutes. Its latest close moves later by the length of the pause plus 10 minutes.
+  - **Bids during a pause** are refused with `sale_paused`. Users are told on the lot page and by notification.
 
 ### 4.9 Who may bid
 
@@ -234,7 +245,33 @@ A bid is accepted only if all of these pass, in the bid transaction:
 - **Registration sets a limit for that lot.**
   - Registering with USDC set aside is approved at once.
   - Any route that staff review should be requested at least 24 hours before the scheduled end.
+  - A bid above the registered limit is refused (`registration_limit_exceeded`). To raise the limit, the bidder registers again for the higher amount, on the same terms.
 - **Phase 1 effect.** Until card holds (PAY-06) or a bank-wire rail exist, high-value lots can be bid on only with USDC set aside.
+
+### 6.5 Ledger holds in the bid transaction (for MKT-02 and BE-03)
+
+The ledger (BE-03) keeps one hold for each lot that a bidder leads, against that bidder's backing.
+
+| Backing | What the hold is |
+|---|---|
+| USDC set aside | A hold on the deposit the indexer recorded: the all-in amount at the maximum |
+| Card hold | A hold that mirrors the card authorisation |
+| Bidding limit | A hold against the limit. It reserves part of a permission, not money |
+
+**In the bid transaction, after the price is recomputed:**
+
+1. **The new leader:**
+   - a new leader gets a hold for the all-in amount at their maximum;
+   - a leader who raised their maximum gets their hold enlarged.
+2. **The previous leader,** if outbid, has their hold for this lot voided. The backing is released as in 6.1.
+3. **No other holds move.** Holds are keyed by lot and bidder, and are idempotent by the bid's idempotency key.
+
+**The backing check runs before the result is known,** as if the new maximum would lead. So a refusal never hints at the leader's maximum.
+
+**At the close:**
+
+- **The winner's hold** is captured: by the escrow settlement, by a C5 capture, or when the payment arrives.
+- **Every other hold** for the lot is voided.
 
 ## 7. After the hammer
 
@@ -247,7 +284,7 @@ At or after the end time, the close command (a system actor) locks the lot and r
 | How the winner was backed | Payment |
 |---|---|
 | USDC set aside | Paid at settlement, from the amount set aside. The rest goes back to the winner |
-| Card hold | The hold is captured for the all-in amount at the close |
+| Card hold | The hold is captured for the all-in amount at the close. If the capture fails, the winner pays within 48 hours, as with a bidding limit |
 | Bidding limit | The winner pays the all-in amount within **48 hours**, through the TWD gateway or card checkout. Reminders go out at the close, after 24 hours, and 4 hours before the deadline |
 
 - **One extension.** Support may extend the deadline once, by up to 72 hours, for a documented payment problem such as a card issuer's block.
@@ -276,11 +313,11 @@ At or after the end time, the close command (a system actor) locks the lot and r
   - It is a private offer, never shown to other users.
 - **Accepting means paying.** The offer opens the fixed-price checkout (section 9) with the policy check for `sale.buy`. An unpaid acceptance simply lapses, with no strike.
 - **If nobody takes an offer,** the lot is `unsold`. The operator relists it as a new lot or lists it at fixed price.
-- **The bid log** records the second-chance sale.
+- **An offer record.** The bid log is final at the close, so a second-chance or post-auction sale gets its own published offer record (`settlement.md`, 3.4). That record refers to the bid log by its hash.
 
 ### 7.5 Reserve not met: post-auction offer
 
-- The operator may offer the lot to the highest bidder for 24 hours.
+- Within 3 days of the close, the operator may offer the lot to the highest bidder for 24 hours. A removed bidder is skipped.
 - **The price** is between that bidder's own maximum and the reserve, plus the premium.
 - Accepting means paying, as in 7.4.
 
@@ -288,7 +325,7 @@ At or after the end time, the close command (a system actor) locks the lot and r
 
 - Taiwan gives consumers a 7-day right to cancel distance sales (Consumer Protection Act, Art. 19) [G]. The list of exceptions (通訊交易解除權合理例外情事適用準則, Art. 2) doesn't name auctions [S], so assume the right applies to auction wins until counsel rules. When the period starts for an item kept in our vault is already an open question in the brief.
 - **Until counsel rules (CMP-02):**
-  - A consumer winner who cancels within the period gets a full refund on the same payment method.
+  - A consumer winner who cancels within the period gets a full refund on the same payment method once the item is back in our inventory. If its token has been transferred, that means once the token is returned; the lot becomes `returned`.
   - There is no strike.
   - The lot goes to second-chance offers if it's within 14 days of the close; otherwise it is relisted.
 - **Repeated cancellations** go to Compliance for review. They're not penalised.
@@ -331,12 +368,12 @@ The reserve is the only thing that protects our price.
 1. **Reserve.** Checkout starts by reserving one available unit for the buyer, in one transaction. Only an available unit can be reserved, and pools of units use `FOR UPDATE SKIP LOCKED`.
 2. **Hold for 10 minutes.** When the buyer submits payment (an on-chain payment or a provider's checkout session), the reservation extends to 30 minutes from that moment.
 3. **The payment can't outlive the reservation.**
-   - The on-chain payment authorisation (`settlement.md`, section 5) expires with the reservation.
+   - The on-chain payment authorisation (the voucher, `settlement.md` section 4, R9) expires with the reservation.
    - So does the card provider's checkout session.
    - A payment after the reservation lapses therefore fails, instead of selling a unit twice.
 4. **Sell once.**
-   - The database allows one completed sale per item (a unique constraint).
-   - On-chain, the token can leave our inventory only once.
+   - The database allows one live completed sale per item: a unique constraint on sales that haven't been returned or cancelled.
+   - On-chain, the token can leave our inventory only once per sale. It comes back only through a return after a cancellation (R8).
 5. **Release.** On expiry, a buyer's cancel or a failed payment, the unit is available again at once.
 6. **Price changes** never affect a live reservation. TWD totals are fixed when checkout starts.
 7. **Policy check:** `sale.buy` (C6), inside the reserve command, and again at payment.
@@ -373,7 +410,9 @@ Every command has an actor and an idempotency key, runs in one database transact
 | `auction.place_bid` (new or raised maximum) | User | `auction.bid` | `auctions/` |
 | `auction.lower_reserve`, `auction.void_bid`, `auction.remove_bidder`, `auction.withdraw` | Operator | Item rules only | `auctions/` |
 | `auction.pause_sale`, `auction.resume_sale` | Operator, or monitoring as a system actor | — | `auctions/` |
-| `auction.register` (high-value lots) | User | `auction.bid` | `auctions/` |
+| `auction.register` (high-value lots), `auction.change_payment_method` | User | `auction.bid` | `auctions/` |
+| `auction.review_registration`, `auction.extend_payment_deadline` | Operator | — | `auctions/` |
+| `auction.release_set_aside` (an outbid bidder takes back their USDC) | User; system at the close | — | `auctions/` |
 | `auction.open` (at the start time; fixes the reserve commitment) | System | — | `auctions/` |
 | `auction.close` | System | — | `auctions/` |
 | `auction.record_payment`, `auction.mark_defaulted` | System (from C5 events and deadlines) | — | `auctions/` |
@@ -381,7 +420,8 @@ Every command has an actor and an idempotency key, runs in one database transact
 | `auction.accept_offer` | User | `sale.buy` | `auctions/`, `sales/` |
 | `auction.settle` | System | — | `auctions/` |
 | `sale.list`, `sale.change_price`, `sale.withdraw` | Operator | Item rules | `sales/` |
-| `sale.reserve`, `sale.cancel_reservation` | User | `sale.buy` (reserve only) | `sales/` |
+| `sale.reserve`, `sale.submit_payment` (extends the hold to 30 minutes), `sale.cancel_reservation` | User | `sale.buy` (reserve and submit) | `sales/` |
+| `sale.cancel_within_right` (auction wins and fixed-price sales, 7.6) | User; operator on the user's behalf | — (a statutory right is never refused by the policy) | `sales/` |
 | `sale.complete`, `sale.release_reservation` | System | — | `sales/` |
 
 C6 v0 has two actor kinds, user and operator. The close, deadline and settlement jobs need a third, **system**, which skips user checks like an operator does. This is a change request to Compliance.
@@ -406,6 +446,8 @@ Marketplace refusals sit beside the launch policy's (C6, section 11). When both 
 | `rail_limit_exceeded` | `auction.payment_method_limit` |
 | `secured_backing_required` | `auction.set_aside_required` |
 | `registration_required` | `auction.registration_required` |
+| `registration_limit_exceeded` | `auction.registration_limit` |
+| `sale_paused` | `auction.paused` |
 | `bidder_barred`, `staff_not_permitted`, `supplier_not_permitted` | `policy.unavailable` (C6) |
 | `contest_entrant` | `auction.contest_entrant` (only when the contest is on) |
 | `rate_limited` | `auction.slow_down` |
@@ -421,13 +463,15 @@ Marketplace refusals sit beside the launch policy's (C6, section 11). When both 
 | `auction.closed` | Bidding has closed. | 競標已結束。 | 入札は終了しました。 |
 | `auction.not_on_ladder` | At this price, bids go up in steps of {step}. | 此價格區間的出價級距為 {step}。 | この価格帯では {step} 単位で入札できます。 |
 | `auction.below_minimum` | Bid at least {minimum}. | 出價至少需 {minimum}。 | {minimum} 以上で入札してください。 |
-| `auction.raise_above_own_max` | Your new maximum must be above {current}. | 新的最高出價必須高於 {current}。 | 新しい上限額は {current} より高く設定してください。 |
-| `auction.limit_reached` | This is above your bidding limit. Choose a lower maximum, or see how to raise your limit. | 此金額超過您的出價上限。請調低最高出價，或查看提高上限的方式。 | この金額は入札上限を超えています。上限額を下げるか、入札上限の引き上げ方法をご確認ください。 |
+| `auction.raise_above_own_max` | Your new maximum must be above {current}. | 新的出價上限必須高於 {current}。 | 新しい最高入札額は {current} より高く設定してください。 |
+| `auction.limit_reached` | This is above your bidding limit. Choose a lower maximum, or see how to raise your limit. | 此金額超過您的出價額度。請調低出價上限，或查看提高額度的方式。 | この金額は入札可能額を超えています。最高入札額を下げるか、入札可能額の引き上げ方法をご確認ください。 |
 | `auction.payment_method_limit` | This payment method can't cover a total of {total}. Choose another one. | 此付款方式無法支付總計 {total}，請選擇其他付款方式。 | このお支払い方法では合計 {total} をお支払いいただけません。別の方法をお選びください。 |
 | `auction.set_aside_required` | For now, your bids need the full amount set aside first. | 目前您的出價需先預留全額。 | 現在、入札には全額の事前確保が必要です。 |
 | `auction.registration_required` | Register for this lot before you bid. | 此拍品須先完成登記才能出價。 | このロットに入札するには事前登録が必要です。 |
+| `auction.registration_limit` | This is above the amount you registered for this lot. | 此金額超過您為此拍品登記的額度。 | この金額は、このロットの登録額を超えています。 |
+| `auction.paused` | Bidding is paused. When it resumes, you'll have the time that was left plus 10 minutes. | 競標暫停中。恢復時將保留剩餘時間，並另加 10 分鐘。 | 入札を一時停止しています。再開時には、残り時間に 10 分を加えます。 |
 | `auction.contest_entrant` | You entered the prediction contest for this lot, so you can't bid on it. | 您已參加此拍品的預測活動，因此無法對其出價。 | このロットの予想コンテストに参加しているため、入札できません。 |
-| `auction.slow_down` | Too many bids at once. Try again in a moment. | 出價過於頻繁，請稍後再試。 | 短時間に入札が集中しています。少し待ってからもう一度お試しください。 |
+| `auction.slow_down` | Too many bids at once. Try again in a moment. | 出價過於頻繁，請稍後再試。 | 入札の回数が多すぎます。少し待ってからもう一度お試しください。 |
 | `sale.reservation_expired` | Your hold on this item has ended. Start checkout again. | 此商品的保留時間已結束，請重新結帳。 | この商品の確保時間が終了しました。もう一度購入手続きを行ってください。 |
 | `sale.sold_out` | This item is sold out. | 此商品已售完。 | この商品は完売しました。 |
 | `sale.buyer_limit` | You've reached the limit for this item. | 您已達到此商品的購買上限。 | この商品の購入上限に達しました。 |
@@ -470,14 +514,46 @@ Marketplace refusals sit beside the launch policy's (C6, section 11). When both 
 
 **Watchers see a snapshot that refreshes every few seconds** (`events-and-channels.md`, section 5). The panel should say "Bid to get live updates" rather than imply that a watcher's page is live.
 
+**Flows Design needs to draw,** beyond the panel itself:
+
+| Flow | Steps |
+|---|---|
+| **First bid on a lot** | Choose the payment method (6.2). If it needs anything set aside, set aside the all-in amount at the maximum: one confirmation, with gas paid by us and the word "escrow" never shown. Then confirm the bid |
+| **Registration** for a high-value lot (6.4) | State the intended maximum; set the amount aside or authorise a card hold; then see the result: approved at once, or "under review" with the 24-hour note |
+| **Outbid** | The `auction.outbid` notice with the next minimum. For USDC set aside, the choice to take it back or keep it ready (`auction.outbid_take_back`) |
+| **Paying a win** | The total and the deadline; pay through the TWD gateway or card checkout; then the "Yours" state |
+| **An offer** (second chance or post-auction) | The offer screen with the total and expiry; accepting goes straight to checkout |
+| **Cancelling within the right** (7.6) | Request, then return the item if it was transferred, then the refund on the same payment method |
+
+**Copy keys for each viewer state:**
+
+| State | Key |
+|---|---|
+| Watching | `auction.live_on_bid` |
+| Registration needed | `auction.registration_required` |
+| Leading | `auction.leading` and `auction.your_max` |
+| Outbid | `auction.outbid` and, for USDC set aside, `auction.outbid_take_back` |
+| Tied | `auction.tied_earlier` |
+| Closing | `auction.soft_close` |
+| Extended | `auction.extended` |
+| Won, payment due | `auction.payment_due` |
+| Won and paid | `auction.won_paid` |
+| Lost | `auction.lost` |
+| Unsold | `auction.unsold` |
+| Withdrawn | `auction.withdrawn` |
+| Paused | `auction.paused` |
+| An offer | `auction.offer` |
+
 **Copy drafts:**
 
 | Key | en | zh-TW | ja |
 |---|---|---|---|
-| `auction.premium_line` | Buyer's premium (20%) {premium} · Total {total} | 買家佣金（20%）{premium}・總計 {total} | 落札手数料（20%）{premium}・合計 {total} |
-| `auction.total_at_max` | If you win at your maximum, you pay {total}. | 若以您的最高出價得標，需支付 {total}。 | 上限額で落札した場合のお支払い額は {total} です。 |
+| `auction.premium_line` | Buyer's premium (20%) {premium} · Total {total} | 買家佣金（20%）{premium} · 總計 {total} | 落札手数料（20%）{premium}・合計 {total} |
+| `auction.total_at_max` | If you win at your maximum, you pay {total}. | 若以您的出價上限得標，需支付 {total}。 | 最高入札額で落札した場合のお支払い額は {total} です。 |
+| `auction.your_max` | Your maximum: {amount} | 您的出價上限：{amount} | あなたの最高入札額：{amount} |
 | `auction.twd_indicative` | ≈ {twd} (indicative) | 約 {twd}（僅供參考） | 約 {twd}（参考値） |
-| `auction.soft_close` | A bid in the last 2 minutes resets the clock to 2 minutes. Bidding closes by {latestClose} at the latest. | 最後 2 分鐘內若有新出價，倒數將重設為 2 分鐘。最晚於 {latestClose} 截止。 | 終了 2 分前以降に入札があると、残り時間は 2 分に戻ります。遅くとも {latestClose} に終了します。 |
+| `auction.soft_close` | A bid that raises the price in the last 2 minutes resets the clock to 2 minutes. Bidding closes by {latestClose} at the latest. | 最後 2 分鐘內若有出價推高目前價格，倒數將重設為 2 分鐘。最晚於 {latestClose} 截止。 | 終了 2 分前以降に現在価格を上げる入札があると、残り時間は 2 分に戻ります。遅くとも {latestClose} に終了します。 |
+| `auction.extended` | Extended: the clock was reset to 2 minutes. | 已延長：倒數已重設為 2 分鐘。 | 延長：残り時間が 2 分に戻りました。 |
 | `auction.no_reserve` | No reserve | 無底價 | 最低落札価格なし |
 | `auction.reserve_not_met` | Reserve not met | 未達底價 | 最低落札価格に未達 |
 | `auction.reserve_met` | Reserve met | 已達底價 | 最低落札価格に到達 |
@@ -487,13 +563,21 @@ Marketplace refusals sit beside the launch policy's (C6, section 11). When both 
 | `auction.payment_due` | You won. Pay {total} by {deadline}. | 恭喜得標。請於 {deadline} 前支付 {total}。 | 落札しました。{deadline} までに {total} をお支払いください。 |
 | `auction.free_to_bid` | Bidding is free. | 出價免費。 | 入札は無料です。 |
 | `auction.live_on_bid` | Bid to get live updates. | 出價後即可接收即時更新。 | 入札するとリアルタイムで更新されます。 |
+| `auction.lost` | Bidding has ended. Another bidder won this lot. | 競標已結束，此拍品由其他出價者得標。 | 入札は終了しました。このロットは他の方が落札しました。 |
+| `auction.unsold` | Bidding has ended. This lot didn't sell. | 競標已結束，此拍品未成交。 | 入札は終了しました。このロットは落札されませんでした。 |
+| `auction.withdrawn` | This lot has been withdrawn. All bids on it are cancelled. | 此拍品已撤回，所有出價均已取消。 | このロットは出品が取り下げられました。すべての入札は取り消されました。 |
+| `auction.won_paid` | Yours. Kept in the vault until you ask for it. | 已屬於您。我們將為您妥善保管，直到您要求寄送。 | あなたのものになりました。お届けのご依頼まで保管いたします。 |
+| `auction.offer` | You can buy this lot for {total}, buyer's premium included, until {expiry}. | 您可於 {expiry} 前以 {total}（含買家佣金）購買此拍品。 | {expiry} まで、{total}（落札手数料込み）でこのロットを購入できます。 |
+| `auction.outbid_take_back` | You can take back the {amount} you set aside, or keep it ready to bid again. | 您可以取回預留的 {amount}，或保留以便再次出價。 | 確保した {amount} を戻すか、次の入札に備えてそのままにできます。 |
 
 **Glossary for the translations:**
 
 | en | zh-TW | ja |
 |---|---|---|
 | winning bid (hammer price) | 得標價 | 落札価格 |
-| maximum bid | 最高出價 | 上限額 |
+| maximum bid | 出價上限 | 最高入札額 |
+| bidding limit | 出價額度 | 入札可能額 |
+| highest bidder | 最高出價者 | 最高入札者 |
 | buyer's premium | 買家佣金 | 落札手数料 |
 | reserve | 底價 | 最低落札価格 |
 | lot | 拍品 | ロット |
@@ -516,6 +600,7 @@ Marketplace refusals sit beside the launch policy's (C6, section 11). When both 
 3. Is publishing a per-lot pseudonymous bid log, with losing maximums, acceptable under Taiwan's Personal Data Protection Act and the GDPR for EU bidders (`settlement.md`)?
 4. Is a bidding limit without anything set aside a form of credit under Taiwan law (6.2)?
 5. Is the reserve rule (4.5) acceptable as disclosed, and does any market require the reserve to be disclosed?
+6. **The escape hatch** (`settlement.md`, R4) lets a depositor take their own USDC back after 14 days without us, even if their wallet has since screened out. Is that acceptable under sanctions rules, or must a deposit be freezable? This is for CMP-03 as well.
 
 **For other chats:** in the handoff note, as change requests.
 

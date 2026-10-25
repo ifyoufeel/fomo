@@ -30,7 +30,7 @@ Marketplace · MKT-01 · 25 Oct 2026
   - what Payments needs.
 - **`docs/marketplace/events-and-channels.md`:** the C3 proposal:
   - per-lot sequence numbers and deterministic message IDs;
-  - 24 events, with visibility and payloads;
+  - 30 events, with visibility and payloads;
   - the Ably channels and token capabilities;
   - the 1-second-cached watcher snapshot and resync;
   - starting rate limits and the MKT-05 load-test scenario.
@@ -67,11 +67,11 @@ Marketplace · MKT-01 · 25 Oct 2026
 - **Worked examples.** The model produced every result in examples E1–E9 and E7 (the cap), and the bid log example in `settlement.md`. Writing them caught two errors in my first drafts, both fixed before commit:
   - a US$525 bid that isn't on the ladder;
   - a bid log line that missed the reserve rule.
-- **Scripts:**
+- **Scripts,** rerun after the review fixes:
   - the ladder table in the document matches the model, row for row;
-  - every copy key has en, zh-TW and ja text with the same placeholders;
-  - every message key in the refusal table has a draft;
-  - all 34 section references across the four files resolve;
+  - all 37 copy keys have en, zh-TW and ja text with the same placeholders, and none is duplicated;
+  - every message key in the refusal table and every viewer state in section 13 has a draft;
+  - every section reference across the four files resolves;
   - the two references into other chats' folders exist on their branches.
 - **Card coverage,** checked by hand:
 
@@ -92,7 +92,17 @@ Marketplace · MKT-01 · 25 Oct 2026
 | Rule: high-value lots need pre-registration | 6.4 |
 | Rule: watchers get the cached snapshot | `events-and-channels.md` sections 4–5 |
 
-- **Fresh-context review:** see the pull request for the result.
+- **Fresh-context review.** A separate review with no context from this session read all six files and checked every worked example by hand. The examples and the bid log example held up. It found gaps, all fixed in this pull request:
+  - **The bid log** was "never changed" yet recorded second-chance sales. Offers now get their own offer record (`settlement.md` 3.4).
+  - **Return path.** A token couldn't come back to inventory after a 7-day cancellation. R8 now has a return path, and there is a `returned` state.
+  - **Sequence numbers.** `seq` had three meanings. Bid numbers now order bids, and `seq` counts public lot events only.
+  - **Lot states.** The state table was missing transitions.
+  - **Backing.** "Every live bid is backed" contradicted the release of backing when outbid.
+  - **The ladder.** An all-in example used US$12,500, which isn't on the ladder.
+  - **Chain detail in public.** The public `auction.settled` event carried a transaction reference, and the reserve commitment sat on the lot page.
+  - **Missing pieces:** commands, events, refusal codes, a section on ledger holds (6.5), bid-panel state copy and flows.
+  - **Translations.** The ja and zh-TW drafts used one word for both "maximum bid" and "bidding limit".
+  - **Edge cases:** extensions on a lowered reserve or a removal, lots ending in an outage's first minute, the reserve's lower bound, and capture failures.
 - **Not run:**
   - `pnpm check`, CI and Vercel previews: not applicable. These are Markdown files only, and `main` has no tooling until BE-01 merges.
   - Native-speaker review of the zh-TW and ja drafts.
@@ -113,7 +123,7 @@ Marketplace · MKT-01 · 25 Oct 2026
    All of it is in `events-and-channels.md`.
 3. **C1, which affects Backend core (BE-02).**
    - **Lots:** opening bid, reserve, reserve commitment and salt, estimate, start, scheduled end, end, latest close, state, `seq`, and the time left while paused.
-   - **Maximums:** bidder, amount, sequence number, database time, payment method, and status (live, outbid, voided or removed).
+   - **Maximums:** bidder, amount, bid number, database time, payment method, and status (live, outbid, voided or removed).
    - **Per lot and per bidder:** the bidder code, registrations and payment deadlines.
    - **Elsewhere:** strikes, offers, reservations, and the bid log hash and URL.
    - **A unique constraint:** one completed sale per item.
@@ -140,7 +150,8 @@ Marketplace · MKT-01 · 25 Oct 2026
    - funds can move only to settlement or back to the depositor;
    - a 14-day escape hatch after the latest close;
    - signed vouchers that expire with the reservation;
-   - the bid log hash in every settlement event;
+   - the bid log hash, or the offer record hash, in every settlement event;
+   - a return path for a token after a 7-day cancellation (R8);
    - the recommended daily anchor for unsold lots.
 8. **C9, which affects Vault & redemption (VLT-03).**
    - The item record carries the supplier the item was bought from, for the supplier bidding bar.
@@ -164,7 +175,9 @@ Marketplace · MKT-01 · 25 Oct 2026
   - The reserve is never above the low estimate.
   - It can be lowered, never raised.
   - It is committed by hash at opening.
-- **The soft close** extends only for a bid that changes something public. It resets the clock rather than adding time. The end is strict: a bid at the end time exactly is refused.
+- **The soft close** extends whenever the price, the leader or the reserve status changes in the last 2 minutes: through a bid, a lowered reserve or a removal. For bids this means exactly "a bid that raises the price". It resets the clock rather than adding time. The end is strict: a bid at the end time exactly is refused.
+- **Bid numbers and `seq`.** Bid numbers order every accepted maximum, including quiet raises, and break ties. `seq` counts public lot events only, so the live channel has no gaps.
+- **Offer records.** Second-chance and post-auction sales get their own published offer record. The bid log stays final at the close.
 - **Outbid maximums** keep counting for the price, while their backing is released. A void or a removal recomputes the price, which may fall.
 - **USDC bidders always set the amount aside.**
   - Exposure counts only the lots a bidder leads, plus unpaid wins.

@@ -7,7 +7,11 @@ Backend core maintains contract C3 (events) and Marketplace adds the auction cha
 ## 1. Principles
 
 - **Postgres is the truth.** Every event is written to the outbox in the same transaction as the change it describes. Realtime messages are a copy that can be late, repeated or lost. A client that misses one resyncs (section 6).
-- **One sequence per lot.** Each lot has a counter, `seq`, that rises by one with every public event on that lot: bids, the reserve status, extensions, voids, pauses and the close. Clients use it to spot gaps and drop repeats.
+- **One sequence per lot.** Each lot has a counter, `seq`, that rises by one with every *Lot* event in section 2, and with nothing else.
+  - `auction.opened` is 1.
+  - After that, `seq` covers bids that change something public, a lowered reserve, voids and removals, pauses, the close, a withdrawal and settlement. An extension travels inside the event that caused it.
+  - A leader's quiet raise gets a bid number (`sale-rules.md`, 4.4) but no `seq`. So the channel never has a gap that a client can't fill.
+  - Clients use `seq` to spot gaps and drop repeats.
 - **Deterministic message IDs.**
   - A public lot message has the ID `{lotId}:{seq}`. Any other message uses its outbox row's ID.
   - Ably drops a repeated publish with the same ID within about 2 minutes [P], so outbox retries don't show twice.
@@ -24,16 +28,19 @@ Backend core maintains contract C3 (events) and Marketplace adds the auction cha
 |---|---|---|---|
 | `auction.scheduled` | Ops | Sale, start, scheduled end, latest close, opening bid, estimate | `auction.schedule` |
 | `auction.opened` | Lot | Opening bid, reserve status, reserve commitment, end, latest close | `auction.open`: a system job at the start time |
-| `auction.bid_accepted` | Lot | Price, leader code, bid count, reserve status, end, `extended` flag, next minimum bid | `auction.place_bid`, when anything public changes |
-| `auction.reserve_lowered` | Lot | Reserve status (never the amount) | `auction.lower_reserve` |
-| `auction.bid_voided` | Lot | Bidder code; the new price, leader, reserve status and next minimum | `auction.void_bid`, `auction.remove_bidder` |
+| `auction.bid_accepted` | Lot | Price, leader code, bid count (accepted bids that changed something public), reserve status, end, `extended` flag, next minimum bid | `auction.place_bid`, when anything public changes |
+| `auction.reserve_lowered` | Lot | Reserve status (never the amount); price, leader, next minimum, end and `extended` flag, since a lowered reserve can lift the price | `auction.lower_reserve` |
+| `auction.bid_voided` | Lot | Bidder code; the new price, leader, reserve status, next minimum, end and `extended` flag | `auction.void_bid`, `auction.remove_bidder` |
 | `auction.paused`, `auction.resumed` | Lot | Time left when paused; the new end and latest close on resume | `auction.pause_sale`, `auction.resume_sale` |
 | `auction.closed` | Lot | Sold or unsold, winner code, winning bid, premium, total, bid log URL and hash | `auction.close` |
-| `auction.settled` | Lot | Sale kind; a hidden transaction reference, for audit only | `auction.settle` |
+| `auction.settled` | Lot | Sale kind only. The Ops copy adds the transaction reference | `auction.settle` |
 | `auction.withdrawn` | Lot | None: the reason stays internal | `auction.withdraw` |
+| `auction.paid`, `auction.returned` | Ops | Lot, sale kind, total; for a return, the refund reference | `auction.record_payment`, `sale.cancel_within_right` |
+| `auction.offer_accepted`, `auction.offer_lapsed` | Ops | Lot, offer kind, bidder code, total | `auction.accept_offer`, the offer-expiry job |
 | `bidder.max_set` | User | Your maximum, whether you lead, the price, your all-in at your maximum | `auction.place_bid`, also when nothing public changed |
 | `bidder.outbid` | User | Lot, price, next minimum; whether the USDC you set aside can come back | `auction.place_bid` (someone else's bid) |
-| `bidder.leading_again` | User | Lot, price; whether you need to back it again | `auction.void_bid`, `auction.remove_bidder` |
+| `bidder.leading_again` | User | Lot, price. If your backing was released, a note that a win would be paid within 48 hours (`sale-rules.md`, 4.8) | `auction.void_bid`, `auction.remove_bidder` |
+| `bidder.payment_received` | User | Lot, total | `auction.record_payment` |
 | `bidder.won` | User | Lot, winning bid, premium, total; the payment deadline, if any | `auction.close` |
 | `bidder.payment_due_reminder` | User | Lot, total, deadline | Deadline job |
 | `bidder.defaulted` | User, Ops | Lot; the strike count | `auction.mark_defaulted` |
@@ -43,6 +50,7 @@ Backend core maintains contract C3 (events) and Marketplace adds the auction cha
 | `sale.availability_changed` | Snapshot | Units available; sold out | `sale.reserve`, `sale.release_reservation`, `sale.complete` |
 | `buyer.reservation` | User | Listing, unit, the reservation's end | `sale.reserve` |
 | `buyer.purchase_completed` | User | Listing, item, total | `sale.complete` |
+| `buyer.refund_issued` | User | Order, amount, payment method | `sale.cancel_within_right` |
 
 **Not sent:** the reserve amount, any maximum other than your own, the reason for a removal, and anything about wallets or transactions.
 
