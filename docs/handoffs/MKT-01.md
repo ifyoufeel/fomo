@@ -15,6 +15,7 @@ Marketplace · MKT-01 · 25 Oct 2026
 ## What changed
 
 - **Branch:** `claude/gifted-babbage-5uf5qs`, from `main`. It touches only `docs/marketplace/` and `docs/handoffs/`, so it won't conflict with BE-01, DES-01, CMP-01, PAY-01 or VLT-01.
+- **Pull request:** https://github.com/ifyoufeel/fomo/pull/6 (draft).
 - **`docs/marketplace/sale-rules.md`:**
   - the 16 numbers to approve;
   - principles;
